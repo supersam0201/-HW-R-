@@ -1,0 +1,146 @@
+---
+title: "Ｒ語言整理_B54061148"
+output: html_document
+---
+###### 上學期有修程式設計，對Ｒ語言的概念，就是有很多統計、資料相關的package，這學期工統也使用Ｒ語言，以下除了列舉一些之前程設作業繳交的程式碼，另外附上工統目前使用到的作業程式碼，分為回歸分析跟實驗設計兩大部分
+
+# ㄧ、數學式
+
+(a)  Binomial distribution with parameters n and p with  x = 0,1,2,…,n
+$$X\sim B(n,p),\qquad f(x)={n\choose x}p^{x}(1-p)^{n-x}\qquad,x=0,1,2,...,n$$
+
+
+# 二、統計分配繪圖
+```{r, fig.width = 10,echo=TRUE}
+par(mfrow = c(1,2))
+x<-seq(0,10)
+y<-seq(0,1,0.1)
+y1<-dbinom(x,10,0.2)
+y2<-dbinom(x,10,0.5)
+y3<-dbinom(x,10,0.7)
+plot(x,y,ylim=c(0,0.4),type="n",ylab = "pmf")
+par(new = TRUE)
+plot(y1,type = "h",col="red",lty=2,ann=FALSE,axes=FALSE,ylim=c(0,0.4))
+par(new = TRUE)
+plot(y1,type = "p",col="red",pch=17,ann=FALSE,axes=FALSE,ylim=c(0,0.4))
+par(new = TRUE)
+plot(y2,col="blue",pch=8,ann=FALSE,axes=FALSE,ylim=c(0,0.4))
+par(new = TRUE)
+plot(y2,col="blue",type="h",lty = 6,ann=FALSE,axes=FALSE,ylim=c(0,0.4))
+par(new = TRUE)
+plot(y3,col="black",pch=19,ann=FALSE,axes=FALSE,ylim=c(0,0.4))
+par(new = TRUE)
+plot(y3,col="black",type="h",lty = 1,ann=FALSE,axes=FALSE,ylim=c(0,0.4))
+title(expression("Binomaial(n,p) with n = 10"))
+legend("topright", c("p = 0.7", "p = 0.5","p = 0.2"), col=c("black", "blue","red"), lty=c(1,6,2),pch=c(19,8,17))
+x<-seq(0,5)
+y<-seq(0,5)
+plot(x,y,type="n",xlim = c(0,5),ylim = c(0,3),ylab = "pdf")
+x<-seq(0,5)
+curve(dgamma(x,1,3),add = T,col="black")
+curve(dgamma(x,2,3),add = T,col="red",lty=2)
+curve(dgamma(x,shape =3,3),add = T,col="blue",lty=4)
+curve(dgamma(x,shape =5,3),add = T,col="grey",lty=5)
+title(expression(paste("Gamma(", alpha , ", ", lambda, ") with ", lambda, " = 3"))) 
+legend("topright",c(expression(paste(alpha," = 1")),expression(paste(alpha," = 2")),expression(paste(alpha," = 3")),expression(paste(alpha," = 5"))), col=c("black" ,"red","blue","grey"),lty=c(1,2,4,5))
+```
+
+#  三、迴歸分析
+```{r setup}
+set.seed(54061148)
+n.sample <- 25
+error <- rnorm(n.sample, 0, 0.7)
+x1 <- runif(n.sample, -2, 2)
+x2 <- runif(n.sample, -1, 4)
+x3 <- 0.8*x1 + rnorm(n.sample, 1, 0.5)
+x4 <- 0.2*x1 + rnorm(n.sample, 2, 0.5)
+x5 <- -0.5*x1 + rnorm(n.sample, 0, 0.5)
+x6 <- rnorm(n.sample, 2, 0.5)
+X <- matrix(NA, n.sample, 6)
+X[,1] <- x1
+X[,2] <- x2
+X[,3] <- x3
+X[,4] <- x4
+X[,5] <- x5
+X[,6] <- x6
+colnames(X) <- c("x1", "x2", "x3", "x4", "x5", "x6")
+### True model ###
+y <- 10 + 0.5*x1 - 5*x2 + error
+### Training set and testing set ### 
+data.train <- data.frame(X[1:20,]) 
+data.train$y <- y[1:20]
+data.test <- data.frame(X[21:25,]) 
+data.test$y <- y[21:25]
+fit0 <- lm(y~x1+x2, data = data.train)
+summary(fit0)
+fit1 <- lm(y~x1+x2+x3+x4+x5+x6, data = data.train) 
+summary(fit1)
+pca <- princomp(data.train[,1:6]) 
+summary(pca)
+pca$loadings
+```
+
+#### （1）Package olsrr
+```{r olsrr}
+z1 <- pca$scores[,1] 
+z2 <- pca$scores[,2] 
+z3 <- pca$scores[,3]
+z4 <- pca$scores[,4] 
+z5 <- pca$scores[,5] 
+z6 <- pca$scores[,6] 
+fit.by.pca2 <- lm(y~z1+z2+z3+z4+z5+z6, data=data.train)
+summary(fit.by.pca2)
+
+library(olsrr)
+stepwise.both <- ols_step_both_p(fit1, pent = 0.15, prem = 0.15)
+summary(stepwise.both$model)
+# Forward
+stepwise.for <- ols_step_forward_p(fit0, pent = 0.15)
+summary(stepwise.for$model)
+# Backward
+stepwise.back <- ols_step_backward_p(fit0, prem = 0.15)
+summary(stepwise.back$model)
+```
+
+#### （2）Package glmnet
+```{r glmnet}
+### By AIC
+library(glmnet)
+# Both
+stepwise.both <- ols_step_both_aic(fit0)
+plot(stepwise.both)
+# Forward
+stepwise.for <- ols_step_forward_aic(fit1)
+plot(stepwise.for)
+summary(stepwise.for$model)
+# Backward
+stepwise.back <- ols_step_backward_aic(fit0)
+plot(stepwise.back)
+summary(stepwise.back$model)
+#lasso
+train.X <- X[1:20,]
+```
+
+# 四、實驗設計 
+```{r DOE}
+library("FrF2")
+library("rsm")
+library("BsMD")
+#########################
+design1 <- FrF2(16, generators = "ABCD", randomize=FALSE) 
+y <- c(340, 362, 301, 182, 280, 290, 252,160,336,344,308,184,269,284,253,163)
+design1 <- add.response(design1, y)
+design1
+design1$A <- (as.numeric(design1$A)-(1.5))/(0.5)
+design1$B <- (as.numeric(design1$B)-(1.5))/(0.5)
+design1$C <- (as.numeric(design1$C)-(1.5))/(0.5)
+design1$D <- (as.numeric(design1$D)-(1.5))/(0.5)
+aliases(lm(y ~ (.)^2, data = design1), code=TRUE, condense=TRUE)
+fit1 <- lm(y ~ A+B+C+A*B+B*C, data = design1)
+fit1 <- lm(y ~ (.)^2, data = design1)
+summary(fit1)
+effects <- FrF2::DanielPlot(fit1, code = TRUE, half = TRUE)
+
+effects$x
+BsMD::LenthPlot(fit1)
+```
